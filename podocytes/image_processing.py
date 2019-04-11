@@ -142,7 +142,7 @@ def find_glomeruli(glomeruli_view):
     return label_image
 
 
-def find_podocytes(podocyte_image, glomeruli_region,
+def find_podocytes(podocyte_image, glomeruli_image, glomeruli_region,
                    min_sigma=1, max_sigma=4, dog_threshold=0.17,
                    cropping_margin=10):
     """Identify podocytes in the image volume.
@@ -151,6 +151,8 @@ def find_podocytes(podocyte_image, glomeruli_region,
     ----------
     podocyte_image : 3D ndarray
         Image of podocyte fluorescence.
+    glomeruli_image : 3D ndarray
+        Image of glomuleri fluorescence (only needed to crop for visualization).
     glomeruli_region : RegionProperties
         Single glomeruli region, found with scikit-image regionprops.
     min_sigma : float, optional
@@ -171,18 +173,21 @@ def find_podocytes(podocyte_image, glomeruli_region,
     wshed : 3D ndarray
         Watershed image showing podoyctes.
     """
+    print(f"glomeruli_region {glomeruli_region}")
     bbox = glomeruli_region.bbox  # bounding box coordinates
     centroid_offset = tuple(bbox[dim] - cropping_margin
                             for dim in range(podocyte_image.ndim))
-    image_roi = crop_region_of_interest(podocyte_image, bbox,
+    podoim_roi = crop_region_of_interest(podocyte_image, bbox,
                                         margin=cropping_margin)
-    blobs = blob_dog(image_roi,
+    glomim_roi = crop_region_of_interest(glomeruli_image, bbox,
+                                        margin=cropping_margin)
+    blobs = blob_dog(podoim_roi,
                      min_sigma=min_sigma,
                      max_sigma=max_sigma,
                      threshold=dog_threshold)
-    wshed = marker_controlled_watershed(image_roi, blobs)
-    regions = regionprops(wshed, intensity_image=image_roi)
-    return (regions, centroid_offset, wshed)
+    wshed = marker_controlled_watershed(podoim_roi, blobs)
+    regions = regionprops(wshed, intensity_image=podoim_roi)
+    return (regions, centroid_offset, wshed, podoim_roi, glomim_roi)
 
 
 def gradient_of_image(image):

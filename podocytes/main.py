@@ -143,21 +143,38 @@ def process_image_series(images, filename, args, save_intermediates=True, outfol
     #print(pathlib.Path(outfolder) / (str(pathlib.Path(filename).name) + "_label_glom"+str(i).zfill(3) + ".tif")))
     glomeruli_labels = find_glomeruli(glomeruli_view)
     if save_intermediates:
+        nz, ny, nx = glomeruli_view.shape
+        logging.info(f"glom region size nz {nz} ny {ny} nx {nx}")
+        tmp = np.zeros((nz, ny, nx, 3), dtype=np.uint16)
+        tmp[...,0] = glomeruli_view
+        tmp[...,1] = podocytes_view
+        tmp[...,2] = glomeruli_labels
         fname = pathlib.Path(outfolder) / (str(pathlib.Path(filename).name) + "_label_glom" + ".tif")
-        io.imsave(str(fname), glomeruli_labels.astype(np.uint16))
+        io.imsave(str(fname), tmp)
     glom_regions = filter_by_size(glomeruli_labels,
                                   args.minimum_glomerular_diameter,
                                   args.maximum_glomerular_diameter)
     glom_index = 0  # labels not always sequential after filtering by size
     logging.info(f"{len(glom_regions)} glomeruli identified.")
     if len(glom_regions) > 0:
+        logging.info(f"print podocytes dtype before: {podocytes_view.dtype}, {np.max(podocytes_view)}")
         podocytes_view = denoise_image(podocytes_view)
+        logging.info(f"print podocytes dtype after: {podocytes_view.dtype}, {np.max(podocytes_view)}")
+
         for i, glom in enumerate(glom_regions):
-            podocyte_regions, centroid_offset, wshed = \
-                    find_podocytes(podocytes_view, glom)
+            logging.info(f"glom bbox {glom.bbox}")
+            podocyte_regions, centroid_offset, wshed, podoim_roi, glomim_roi = \
+                    find_podocytes(podocyte_image=podocytes_view, glomeruli_image=glomeruli_view, glomeruli_region=glom)
             if save_intermediates:
+                nz, ny, nx = podoim_roi.shape
+                logging.info(f"nz {nz} ny {ny} nx {nx}")
+                tmp = np.zeros((nz, ny, nx, 3), dtype=np.uint16)
+                tmp[...,0] = glomim_roi
+                tmp[...,1] = (podoim_roi*255.0).astype(np.uint16)
+                print(f"podoim roi max {np.max(podoim_roi)}")
+                tmp[...,2] = wshed
                 fname =pathlib.Path(outfolder) / (str(pathlib.Path(filename).name) + "_wshed_podo"+str(i).zfill(3) + ".tif")
-                io.imsave(str(fname), wshed) 
+                io.imsave(str(fname), tmp) 
             df = podocyte_statistics(podocyte_regions,
                                      centroid_offset,
                                      voxel_volume)
