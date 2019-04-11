@@ -10,7 +10,7 @@ from skimage import io
 import pims
 import jpype
 import matplotlib.pyplot as plt
-
+import pathlib
 from gooey.python_bindings.gooey_decorator import Gooey as gooey
 from gooey.python_bindings.gooey_parser import GooeyParser
 
@@ -69,7 +69,7 @@ def run_program(args):
             logging.info(f"{images.metadata.ImageName(im_series_num)}")
             images.series = im_series_num
             images.bundle_axes = 'zyxc'
-            single_image_stats = process_image_series(images, filename, args)
+            single_image_stats = process_image_series(images, filename, args, outfolder=args.output_directory)
             stats_list.append(single_image_stats)
     # Summarize output and write to file
     try:
@@ -113,7 +113,7 @@ def configure_parser():
     return args
 
 
-def process_image_series(images, filename, args):
+def process_image_series(images, filename, args, save_intermediates=True, outfolder=None):
     """Process a single image series to count the glomeruli and podocytes.
 
     Parameters
@@ -127,8 +127,12 @@ def process_image_series(images, filename, args):
     Returns
     -------
     single_image_stats : DataFrame
+    glomeruli_labels: np.array
 
     """
+    logging.info(f"process_... {filename}")
+    logging.info(f"process_... {outfolder}")
+
     df_list = []
     glomeruli_view = images[0][..., args.glomeruli_channel_number]
     podocytes_view = images[0][..., args.podocyte_channel_number]
@@ -136,7 +140,11 @@ def process_image_series(images, filename, args):
                    images[0].metadata['mpp'] * \
                    images[0].metadata['mppZ']
     logging.info(f"Voxel volume in real space: {voxel_volume}")
+    #print(pathlib.Path(outfolder) / (str(pathlib.Path(filename).name) + "_label_glom"+str(i).zfill(3) + ".tif")))
     glomeruli_labels = find_glomeruli(glomeruli_view)
+    if save_intermediates:
+        fname = pathlib.Path(outfolder) / (str(pathlib.Path(filename).name) + "_label_glom" + ".tif")
+        io.imsave(str(fname), glomeruli_labels.astype(np.uint16))
     glom_regions = filter_by_size(glomeruli_labels,
                                   args.minimum_glomerular_diameter,
                                   args.maximum_glomerular_diameter)
@@ -144,9 +152,12 @@ def process_image_series(images, filename, args):
     logging.info(f"{len(glom_regions)} glomeruli identified.")
     if len(glom_regions) > 0:
         podocytes_view = denoise_image(podocytes_view)
-        for glom in glom_regions:
+        for i, glom in enumerate(glom_regions):
             podocyte_regions, centroid_offset, wshed = \
                     find_podocytes(podocytes_view, glom)
+            if save_intermediates:
+                fname =pathlib.Path(outfolder) / (str(pathlib.Path(filename).name) + "_wshed_podo"+str(i).zfill(3) + ".tif")
+                io.imsave(str(fname), wshed) 
             df = podocyte_statistics(podocyte_regions,
                                      centroid_offset,
                                      voxel_volume)
