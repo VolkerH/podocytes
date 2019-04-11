@@ -20,6 +20,7 @@ from skimage.morphology import ball, watershed, binary_closing, binary_dilation
 from skimage.measure import label, regionprops
 from skimage.feature import blob_dog
 
+
 import tifffile._tifffile  # imported to silence pims warning
 
 from podocytes.__init__ import __version__
@@ -69,7 +70,7 @@ def run_program(args):
             logging.info(f"{images.metadata.ImageName(im_series_num)}")
             images.series = im_series_num
             images.bundle_axes = 'zyxc'
-            single_image_stats = process_image_series(images, filename, args, outfolder=args.output_directory)
+            single_image_stats = process_image_series(images, filename, im_series_num, args, outfolder=args.output_directory)
             stats_list.append(single_image_stats)
     # Summarize output and write to file
     try:
@@ -113,7 +114,7 @@ def configure_parser():
     return args
 
 
-def process_image_series(images, filename, args, save_intermediates=True, outfolder=None):
+def process_image_series(images, filename, snum, args, save_intermediates=True, outfolder=None):
     """Process a single image series to count the glomeruli and podocytes.
 
     Parameters
@@ -122,6 +123,8 @@ def process_image_series(images, filename, args, save_intermediates=True, outfol
         Input image plus metadata.
     filename : str
         Input image filename.
+    snum: int
+        series number
     args : user input arguments
 
     Returns
@@ -140,8 +143,10 @@ def process_image_series(images, filename, args, save_intermediates=True, outfol
                    images[0].metadata['mpp'] * \
                    images[0].metadata['mppZ']
     logging.info(f"Voxel volume in real space: {voxel_volume}")
-    #print(pathlib.Path(outfolder) / (str(pathlib.Path(filename).name) + "_label_glom"+str(i).zfill(3) + ".tif")))
     glomeruli_labels = find_glomeruli(glomeruli_view)
+    
+
+
     if save_intermediates:
         nz, ny, nx = glomeruli_view.shape
         logging.info(f"glom region size nz {nz} ny {ny} nx {nx}")
@@ -149,7 +154,7 @@ def process_image_series(images, filename, args, save_intermediates=True, outfol
         tmp[...,0] = glomeruli_view
         tmp[...,1] = podocytes_view
         tmp[...,2] = glomeruli_labels
-        fname = pathlib.Path(outfolder) / (str(pathlib.Path(filename).name) + "_label_glom" + ".tif")
+        fname = pathlib.Path(outfolder) / (str(pathlib.Path(filename).name) + "S_" + str(snum).zfill(2) +  " _label_glom" + ".tif")
         io.imsave(str(fname), tmp)
     glom_regions = filter_by_size(glomeruli_labels,
                                   args.minimum_glomerular_diameter,
@@ -173,7 +178,7 @@ def process_image_series(images, filename, args, save_intermediates=True, outfol
                 tmp[...,1] = (podoim_roi*255.0).astype(np.uint16)
                 print(f"podoim roi max {np.max(podoim_roi)}")
                 tmp[...,2] = wshed
-                fname =pathlib.Path(outfolder) / (str(pathlib.Path(filename).name) + "_wshed_podo"+str(i).zfill(3) + ".tif")
+                fname =pathlib.Path(outfolder) / (str(pathlib.Path(filename).name) + "S_" + str(snum).zfill(2) + "_P"+str(i).zfill(3) + ".tif")
                 io.imsave(str(fname), tmp) 
             df = podocyte_statistics(podocyte_regions,
                                      centroid_offset,
