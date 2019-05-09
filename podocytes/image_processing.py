@@ -5,7 +5,7 @@ from skimage.filters import threshold_yen, gaussian
 from skimage.morphology import ball, watershed, binary_closing, binary_dilation
 from skimage.measure import label, regionprops
 from skimage.feature import blob_dog
-
+from skimage.segmentation import clear_border
 
 __all__ = ['crop_region_of_interest',
            'denoise_image',
@@ -123,14 +123,15 @@ def filter_by_size(label_image, min_diameter, max_diameter):
     return regions
 
 
-def find_glomeruli(glomeruli_view):
+def find_glomeruli(glomeruli_view, remove_border=True):
     """Preprocess glomeruli channel image, return labelled glomeruli image.
 
     Parameters
     ----------
     glomeruli_view : 3D ndarray
         Image array of glomeruli fluorescence channel.
-
+    remove_border: bool
+        remove glomuleri touching the image border if True
     Returns
     -------
     label_image : 3D ndarray
@@ -138,7 +139,10 @@ def find_glomeruli(glomeruli_view):
     """
     glomeruli_view = denoise_image(glomeruli_view)
     threshold = threshold_yen(glomeruli_view)
-    label_image = label(glomeruli_view > threshold)
+    mask = glomeruli_view > threshold
+    if remove_border:
+        mask = clear_border(mask)
+    label_image = label(mask)
     return label_image
 
 
